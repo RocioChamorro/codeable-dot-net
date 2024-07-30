@@ -13,7 +13,7 @@ public static class CachedInventoryApiBuilder
     // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
-    builder.Services.AddScoped<IWarehouseStockSystemClient, WarehouseStockSystemClient>();
+    builder.Services.AddSingleton<IWarehouseStockSystemClient, WarehouseStockSystemClient>();
 
     // Inject the cache object and other dictionaries into the service container
     builder.Services.AddSingleton<StockCache>();
