@@ -1,5 +1,6 @@
 namespace CachedInventory;
 
+using System.Collections.Concurrent;
 using Microsoft.AspNetCore.Mvc;
 
 public static class CachedInventoryApiBuilder
@@ -13,57 +14,49 @@ public static class CachedInventoryApiBuilder
     builder.Services.AddEndpointsApiExplorer();
     builder.Services.AddSwaggerGen();
     builder.Services.AddScoped<IWarehouseStockSystemClient, WarehouseStockSystemClient>();
-    builder.Services.AddSingleton<StockCache>(); // Registro de StockCache
+
+    // Inject the cache object and other dictionaries into the service container
+    builder.Services.AddSingleton<StockCache>();
 
     var app = builder.Build();
-
     // Configure the HTTP request pipeline.
-    if (app.Environment.IsDevelopment())
-    {
-      app.UseSwagger();
-      app.UseSwaggerUI();
-    }
 
     app.UseHttpsRedirection();
 
-    app.MapGet(
-                    "/stock/{productId:int}",
-                    async ([FromServices] StockCache stockCache, int productId) =>
-                    {
-                      var stock = await stockCache.GetStock(productId);
-                      return Results.Ok(stock);
-                    })
-                    .WithName("GetStock")
-                    .WithOpenApi();
+    app.MapGet("/stock/{productId:int}",
+      async ([FromServices] StockCache stockCache, int productId) =>
+      {
+        var stock = await stockCache.GetStock(productId);
+        return Results.Ok(stock);
+      })
+      .WithName("GetStock")
+      .WithOpenApi();
 
-    app.MapPost(
-        "/stock/retrieve",
-        async ([FromServices] StockCache stockCache, [FromBody] RetrieveStockRequest req) =>
+    app.MapPost("/stock/retrieve",
+      async ([FromServices] StockCache stockCache, [FromBody] RetrieveStockRequest req) =>
+      {
+        try
         {
-          var stock = await stockCache.GetStock(req.ProductId);
-          if (stock < req.Amount)
-          {
-            return Results.BadRequest("Not enough stock.");
-          }
-
-          stock -= req.Amount;
-          await stockCache.UpdateStock(req.ProductId, stock);
+          await stockCache.Retrieve(req.ProductId, req.Amount);
           return Results.Ok();
-        })
-        .WithName("RetrieveStock")
-        .WithOpenApi();
-
-    app.MapPost(
-        "/stock/restock",
-        async ([FromServices] StockCache stockCache, [FromBody] RestockRequest req) =>
+        }
+        catch (InvalidOperationException ex)
         {
-          var stock = await stockCache.GetStock(req.ProductId);
-          stock += req.Amount;
-          await stockCache.UpdateStock(req.ProductId, stock);
-          return Results.Ok();
-        })
-        .WithName("Restock")
-        .WithOpenApi();
+          return Results.BadRequest(ex.Message);
+        }
+      })
+      .WithName("RetrieveStock")
+      .WithOpenApi();
+
+
+    app.MapPost("/stock/restock",
+      async ([FromServices] StockCache stockCache, [FromBody] RestockRequest req) =>
+      {
+        await stockCache.Restock(req.ProductId, req.Amount);
+        return Results.Ok();
+      })
+      .WithName("Restock")
+      .WithOpenApi();
     return app;
   }
 }
